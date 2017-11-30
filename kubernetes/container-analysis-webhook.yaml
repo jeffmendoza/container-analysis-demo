@@ -33,12 +33,7 @@ spec:
           volumeMounts:
             - name: tls
               mountPath: /etc/admission-controller/tls
-            - name: pubkeys
-              mountPath: /etc/admission-controller/pubkeys
       volumes:
         - name: tls
           secret:
             secretName: tls-container-analysis-webhook
-        - name: pubkeys
-          configMap:
-            name: container-analysis-webhook

@@ -17,6 +17,7 @@ create a 1.8 Kubernetes cluster:
 ```
 gcloud alpha container clusters create grafeas \
   --enable-kubernetes-alpha \
+  --scopes https://www.googleapis.com/auth/cloud-platform \
   --cluster-version 1.8.4-gke.0
 ```
 
@@ -24,21 +25,21 @@ gcloud alpha container clusters create grafeas \
 
 ### Deploy the Image Signature Webhook
 
-Create the `tls-image-signature-webhook` secret and store the TLS certs:
+Create the `tls-container-analysis-webhook` secret and store the TLS certs:
 
 ```
-kubectl create secret tls tls-image-signature-webhook \
-  --key pki/image-signature-webhook-key.pem \
-  --cert pki/image-signature-webhook.pem
+kubectl create secret tls tls-container-analysis-webhook \
+  --key pki/container-analysis-webhook-key.pem \
+  --cert pki/container-analysis-webhook.pem
 ```
 
-Create the `image-signature-webhook` deployment:
+Create the `container-analysis-webhook` deployment:
 
 ```
-kubectl apply -f kubernetes/image-signature-webhook.yaml 
+kubectl apply -f kubernetes/container-analysis-webhook.yaml
 ```
 
-Create the `image-signature-webook` [ExternalAdmissionHookConfiguration](https://kubernetes.io/docs/admin/extensible-admission-controllers/#how-are-external-admission-webhooks-triggered):
+Create the `container-analysis-webook` [ExternalAdmissionHookConfiguration](https://kubernetes.io/docs/admin/extensible-admission-controllers/#how-are-external-admission-webhooks-triggered):
 
 ```
 kubectl apply -f kubernetes/admission-hook-configuration.yaml
@@ -55,9 +56,9 @@ kubectl apply -f kubernetes/admission-hook-configuration.yaml
 Run the following commands to remove the Kubernetes resources created during this tutorial:
 
 ```
-kubectl delete deployments grafeas image-signature-webhook
+kubectl delete deployments grafeas container-analysis-webhook
 kubectl delete pods echod
-kubectl delete svc grafeas image-signature-webhook
-kubectl delete secrets tls-image-signature-webhook
-kubectl delete configmap image-signature-webhook
+kubectl delete svc grafeas container-analysis-webhook
+kubectl delete secrets tls-container-analysis-webhook
+kubectl delete configmap container-analysis-webhook
 ```

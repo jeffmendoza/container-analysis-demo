@@ -94,20 +94,14 @@ func admissionReviewHandler(w http.ResponseWriter, r *http.Request) {
 
 	for _, container := range pod.Spec.Containers {
 		admit, err := checkAdmit(container.Image)
-		if err != nil {
-			log.Println(err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
 		if !admit {
-
+			log.Println(err)
 			admissionReviewStatus.Allowed = false
 			admissionReviewStatus.Result = &metav1.Status{
 				Reason: metav1.StatusReasonInvalid,
 				Details: &metav1.StatusDetails{
 					Causes: []metav1.StatusCause{
-						{Message: "fill in"},
+						{Message: err.Error()},
 					},
 				},
 			}
@@ -148,8 +142,7 @@ func checkAdmit(image string) (bool, error) {
 	occs = filterOccurrences(occs)
 
 	if len(occs) > 0 {
-		log.Printf("Found %v occurrences with severity >= %v for image %v", len(occs), sevThresh, image)
-		return false, nil
+		return false, fmt.Errorf("Found %v occurrences with severity >= %v for image %v", len(occs), sevThresh, image)
 	}
 
 	return true, nil
