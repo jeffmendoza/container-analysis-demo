@@ -34,7 +34,6 @@ import (
 )
 
 var (
-	grafeasUrl  string
 	tlsCertFile string
 	tlsKeyFile  string
 	sevThresh   string
