@@ -1,5 +1,5 @@
 {
-  "CN": "image-signature-webhook.default.svc",
+  "CN": "container-analysis-webhook.default.svc",
   "key": {
     "algo": "rsa",
     "size": 2048
