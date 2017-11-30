@@ -24,11 +24,12 @@ spec:
     spec:
       containers:
         - name: container-analysis-webhook
-          image: "gcr.io/google-demos/container-analysis-webhook:0.1.0"
+          image: "gcr.io/jlm-demos/container-analysis-webhook:0.1.0"
           imagePullPolicy: Always
           args:
             - "-tls-cert=/etc/admission-controller/tls/tls.crt"
             - "-tls-key=/etc/admission-controller/tls/tls.key"
+            - "-sev-thresh=HIGH"
           volumeMounts:
             - name: tls
               mountPath: /etc/admission-controller/tls

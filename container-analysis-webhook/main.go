@@ -12,25 +12,21 @@
 package main
 
 import (
-	"bytes"
+	"context"
 	"crypto/tls"
-	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
+	"net/url"
 	"strings"
 
-	"golang.org/x/crypto/openpgp"
-	"golang.org/x/crypto/openpgp/armor"
-	"golang.org/x/crypto/openpgp/clearsign"
-	"golang.org/x/crypto/openpgp/packet"
-
 	grafeas "github.com/Grafeas/client-go/v1alpha1"
+
+	docker "github.com/docker/distribution/manifest/schema2"
+	googleAuth "golang.org/x/oauth2/google"
 
 	"k8s.io/api/admission/v1alpha1"
 	"k8s.io/api/core/v1"
@@ -41,18 +37,26 @@ var (
 	grafeasUrl  string
 	tlsCertFile string
 	tlsKeyFile  string
+	sevThresh   string
+	c           *http.Client
 )
 
 var (
-	notesPath       = "/v1alpha1/projects/image-signing/notes"
-	occurrencesPath = "/v1alpha1/projects/image-signing/occurrences"
+	authScope = "https://www.googleapis.com/auth/cloud-platform"
 )
 
 func main() {
-	flag.StringVar(&grafeasUrl, "grafeas", "http://grafeas:8080", "The Grafeas server address")
 	flag.StringVar(&tlsCertFile, "tls-cert", "/etc/admission-controller/tls/cert.pem", "TLS certificate file.")
 	flag.StringVar(&tlsKeyFile, "tls-key", "/etc/admission-controller/tls/key.pem", "TLS key file.")
+	flag.StringVar(&sevThresh, "sev-thresh", "HIGH", "Severity Threshold: LOW, MEDIUM, HIGH, or CRITICAL")
 	flag.Parse()
+
+	ctx := context.Background()
+	var err error
+	c, err = googleAuth.DefaultClient(ctx, authScope)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	http.HandleFunc("/", admissionReviewHandler)
 	s := http.Server{
@@ -87,149 +91,31 @@ func admissionReviewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	admissionReviewStatus := v1alpha1.AdmissionReviewStatus{Allowed: false}
+
 	for _, container := range pod.Spec.Containers {
-		// Retrieve all occurrences.
-		// This call should be replaced by a filtered called based on
-		// the container image under review.
-		u := fmt.Sprintf("%s/%s", grafeasUrl, occurrencesPath)
-		resp, err := http.Get(u)
+		admit, err := checkAdmit(container.Image)
 		if err != nil {
 			log.Println(err)
-			continue
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
 
-		data, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Println(err)
-			resp.Body.Close()
-			continue
-		}
+		if !admit {
 
-		defer resp.Body.Close()
-
-		if resp.StatusCode != 200 {
-			log.Printf("non 200 status code: %d", resp.StatusCode)
-			continue
-		}
-
-		occurrencesResponse := grafeas.ListOccurrencesResponse{}
-		if err := json.Unmarshal(data, &occurrencesResponse); err != nil {
-			log.Println(err)
-			continue
-		}
-
-		// Find a valid signature for the given container image.
-		match := false
-		for _, occurrence := range occurrencesResponse.Occurrences {
-			resourceUrl := occurrence.ResourceUrl
-			signature := occurrence.Attestation.PgpSignedAttestation.Signature
-			keyId := occurrence.Attestation.PgpSignedAttestation.PgpKeyId
-
-			log.Printf("Container Image: %s", container.Image)
-			log.Printf("ResourceUrl: %s", resourceUrl)
-			log.Printf("Signature: %s", signature)
-			log.Printf("KeyId: %s", keyId)
-
-			if container.Image != strings.TrimPrefix(resourceUrl, "https://") {
-				continue
-			}
-
-			match = true
-
-			s, err := base64.StdEncoding.DecodeString(signature)
-			if err != nil {
-				log.Println(err)
-				continue
-			}
-
-			publicKey := fmt.Sprintf("/etc/admission-controller/pubkeys/%s.pub", keyId)
-			log.Printf("Using public key: %s", publicKey)
-
-			f, err := os.Open(publicKey)
-			if err != nil {
-				log.Println(err)
-				continue
-			}
-
-			block, err := armor.Decode(f)
-			if err != nil {
-				log.Println(err)
-				continue
-			}
-
-			if block.Type != openpgp.PublicKeyType {
-				log.Println("Not public key")
-				continue
-			}
-
-			reader := packet.NewReader(block.Body)
-			pkt, err := reader.Next()
-			if err != nil {
-				log.Println(err)
-				continue
-			}
-
-			key, ok := pkt.(*packet.PublicKey)
-			if !ok {
-				log.Println("Not public key")
-				continue
-			}
-
-			b, _ := clearsign.Decode(s)
-
-			reader = packet.NewReader(b.ArmoredSignature.Body)
-			pkt, err = reader.Next()
-			if err != nil {
-				log.Println(err)
-				continue
-			}
-
-			sig, ok := pkt.(*packet.Signature)
-			if !ok {
-				log.Println("Not signature")
-				continue
-			}
-
-			hash := sig.Hash.New()
-			io.Copy(hash, bytes.NewReader(b.Bytes))
-
-			err = key.VerifySignature(hash, sig)
-			if err != nil {
-				log.Println(err)
-
-				message := fmt.Sprintf("Signature verification failed for container image: %s", container.Image)
-				log.Printf(message)
-
-				admissionReviewStatus.Allowed = false
-				admissionReviewStatus.Result = &metav1.Status{
-					Reason: metav1.StatusReasonInvalid,
-					Details: &metav1.StatusDetails{
-						Causes: []metav1.StatusCause{
-							{Message: message},
-						},
-					},
-				}
-				goto done
-			}
-
-			log.Printf("Signature verified for container image: %s", container.Image)
-			admissionReviewStatus.Allowed = true
-		}
-
-		if !match {
-			message := fmt.Sprintf("No matched signatures for container image: %s", container.Image)
-			log.Printf(message)
 			admissionReviewStatus.Allowed = false
 			admissionReviewStatus.Result = &metav1.Status{
 				Reason: metav1.StatusReasonInvalid,
 				Details: &metav1.StatusDetails{
 					Causes: []metav1.StatusCause{
-						{Message: message},
+						{Message: "fill in"},
 					},
 				},
 			}
 			goto done
 		}
+
+		log.Printf("No vulns found for image: %s", container.Image)
+		admissionReviewStatus.Allowed = true
 	}
 
 done:
@@ -246,4 +132,153 @@ done:
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
+}
+
+func checkAdmit(image string) (bool, error) {
+	image, err := getDigest(image)
+	if err != nil {
+		return false, err
+	}
+
+	occs, err := getOccurrences(image)
+	if err != nil {
+		return false, err
+	}
+
+	occs = filterOccurrences(occs)
+
+	if len(occs) > 0 {
+		log.Printf("Found %v occurrences with severity >= %v for image %v", len(occs), sevThresh, image)
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func getDigest(image string) (string, error) {
+
+	// Trim prefix if there to ease parsing, add back at end
+	if strings.HasPrefix(image, "https://") {
+		image = strings.TrimPrefix(image, "https://")
+	}
+
+	if sp := strings.Split(image, "@"); len(sp) == 2 {
+		if !strings.HasPrefix(sp[1], "sha256:") {
+			return "", fmt.Errorf("Invalid Digest %s Digest should be in form sha256:<sha>", sp[1])
+		}
+		return fmt.Sprintf("https://%s", image), nil
+	}
+
+	sp := strings.Split(image, ":")
+	if len(sp) == 1 {
+		sp = append(sp, "latest")
+	}
+	if len(sp) != 2 {
+		return "", fmt.Errorf("Malformed image/tag %s too many :", image)
+	}
+	pth := strings.Split(sp[0], "/")
+	if len(pth) != 3 {
+		return "", fmt.Errorf("Malformed image %s should be gcr.io/<project>/<name>", sp[0])
+	}
+	path := fmt.Sprintf("v2/%s/%s/manifests/%s", pth[1], pth[2], sp[1])
+	u := &url.URL{
+		Scheme: "https",
+		Host:   pth[0],
+		Path:   path,
+	}
+
+	r, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return "", err
+	}
+
+	r.Header.Set("Accept", docker.MediaTypeManifest)
+
+	rsp, err := c.Do(r)
+	if err != nil {
+		return "", err
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != 200 {
+		return "", fmt.Errorf("non 200 status code: %d", rsp.StatusCode)
+	}
+
+	digest := rsp.Header.Get("docker-content-digest")
+
+	return fmt.Sprintf("https://%s@%s", sp[0], digest), nil
+}
+
+func getOccurrences(image string) ([]grafeas.Occurrence, error) {
+	filter := fmt.Sprintf("kind=\"PACKAGE_VULNERABILITY\" AND resourceUrl=\"%s\"", image)
+	sp := strings.Split(strings.TrimPrefix(image, "https://"), "/")
+	if len(sp) < 3 {
+		return nil, fmt.Errorf("Malformed image %s should be gcr.io/<project>/<name>", image)
+	}
+	imgProject := sp[1]
+
+	path := fmt.Sprintf("v1alpha1/projects/%s/occurrences", imgProject)
+
+	u := &url.URL{
+		Scheme: "https",
+		Host:   "containeranalysis.googleapis.com",
+		Path:   path,
+	}
+	q := &url.Values{}
+	q.Set("pageSize", "1000") // Just do one page
+	q.Set("filter", filter)
+	// if token != "" {
+	// 	q.Set("pageToken", token)
+	// }
+	u.RawQuery = q.Encode()
+
+	resp, err := c.Get(u.String())
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		resp.Body.Close()
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		log.Printf("%v", string(data))
+		return nil, fmt.Errorf("non 200 status code: %d", resp.StatusCode)
+	}
+
+	oResp := grafeas.ListOccurrencesResponse{}
+	if err := json.Unmarshal(data, &oResp); err != nil {
+		return nil, err
+	}
+
+	return oResp.Occurrences, nil
+}
+
+var sevOrder = [...]string{"LOW", "MEDIUM", "HIGH", "CRITICAL"}
+
+func sevGE(val, comp string) bool {
+	if val == "" {
+		return false
+	}
+	for _, sev := range sevOrder {
+		if comp == sev {
+			return true
+		}
+		if val == sev {
+			return false
+		}
+	}
+	return false
+}
+
+func filterOccurrences(occs []grafeas.Occurrence) []grafeas.Occurrence {
+	new := make([]grafeas.Occurrence, 0)
+	for _, o := range occs {
+		if sevGE(o.VulnerabilityDetails.Severity, sevThresh) {
+			new = append(new, o)
+		}
+	}
+	return new
 }
