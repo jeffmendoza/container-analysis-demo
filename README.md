@@ -49,6 +49,40 @@ kubectl apply -f kubernetes/admission-hook-configuration.yaml
 
 ### Testing the Admission Webhook
 
+```bash
+GCLOUD_PROJECT=<my-project>
+
+docker pull hello-world:latest
+docker tag hello-world:latest gcr.io/${GCLOUD_PROJECT}/hello-world:latest
+gcloud docker -- push gcr.io/${GCLOUD_PROJECT}/hello-world:latest
+
+# Wait for scan
+kubectl run hello-world --restart=Never --image=gcr.io/${GCLOUD_PROJECT}/hello-world:latest
+kubectl logs $(kubectl get pods -l app=container-analysis-webhook -o jsonpath='{.items[0].metadata.name}')
+```
+
+```shell
+$ GCLOUD_PROJECT=<my-project>
+
+$ docker pull hello-world:latest
+latest: Pulling from library/hello-world
+[0B
+[1BDigest: sha256:be0cd392e45be79ffeffa6b05338b98ebb16c87b255f48e297ec7f98e123905c
+Status: Downloaded newer image for hello-world:latest
+$ docker tag hello-world:latest gcr.io/${GCLOUD_PROJECT}/hello-world:latest
+$ gcloud docker -- push gcr.io/${GCLOUD_PROJECT}/hello-world:latest
+The push refers to a repository [gcr.io/my-project/hello-world]
+
+[1Blatest: digest: sha256:0b1396cdcea05f91f38fc7f5aecd58ccf19fb5743bbb79cff5eb3c747b36d909 size: 524
+$ 
+$ kubectl run hello-world --restart=Never --image=gcr.io/${GCLOUD_PROJECT}/hello-world:latest
+pod "hello-world" created
+$ 
+$ kubectl logs $(kubectl get pods -l app=container-analysis-webhook -o jsonpath='{.items[0].metadata.name}')
+2017/11/30 23:53:39 No vulns found for image: gcr.io/my-project/hello-world:latest
+$ 
+```
+
 
 
 ## Cleanup
@@ -56,9 +90,8 @@ kubectl apply -f kubernetes/admission-hook-configuration.yaml
 Run the following commands to remove the Kubernetes resources created during this tutorial:
 
 ```
-kubectl delete deployments grafeas container-analysis-webhook
-kubectl delete pods echod
-kubectl delete svc grafeas container-analysis-webhook
+kubectl delete deployments container-analysis-webhook
+kubectl delete pods hello-world
+kubectl delete svc container-analysis-webhook
 kubectl delete secrets tls-container-analysis-webhook
-kubectl delete configmap container-analysis-webhook
 ```

@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
         - name: container-analysis-webhook
-          image: "gcr.io/jlm-demos/container-analysis-webhook:0.1.0"
+          image: "gcr.io/google-samples/container-analysis-webhook:0.1.0"
           imagePullPolicy: Always
           args:
             - "-tls-cert=/etc/admission-controller/tls/tls.crt"
