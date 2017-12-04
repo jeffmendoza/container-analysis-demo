@@ -53,7 +53,8 @@ kubectl create secret tls tls-container-analysis-webhook \
   --cert pki/container-analysis-webhook.pem
 ```
 
-Create the `container-analysis-webhook` deployment:
+Create the `container-analysis-webhook` deployment. The code for the webhook is
+under [container-analysis-webhook](container-analysis-webhook/).
 
 ```
 kubectl apply -f kubernetes/container-analysis-webhook.yaml
