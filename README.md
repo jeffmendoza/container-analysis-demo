@@ -7,6 +7,8 @@ is created that validates container images against Google's Container Analysis
 service. The webhook uses the [Grafeas](https://grafeas.io/) artifact metadata
 API to communicate with the Container Analysis service.
 
+![architecture diagram](ca-demo.png)
+
 ### Prerequisites
 Enable [Vulnerability
 Scanning](https://cloud.google.com/container-registry/docs/vulnerability-scanning)
