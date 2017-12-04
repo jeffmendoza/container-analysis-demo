@@ -1,26 +1,39 @@
 # Container Analysis Demo
 
-This demo configures your Kubernetes cluster to only allow containers without known security vulnerabilities to be run. An [External Admission Webhook](https://kubernetes.io/docs/admin/extensible-admission-controllers/#external-admission-webhooks) is created that validates container images against Google's Container Analysis service. The webhook uses the Grafeas artifact metadata API to communicate with the Container Analysis service. 
+This demo configures your Kubernetes cluster to only allow containers without
+known security vulnerabilities to be run. An [External Admission
+Webhook](https://kubernetes.io/docs/admin/extensible-admission-controllers/#external-admission-webhooks)
+is created that validates container images against Google's Container Analysis
+service. The webhook uses the [Grafeas](https://grafeas.io/) artifact metadata
+API to communicate with the Container Analysis service.
 
 ### Prerequisites
-Enable [Vulnerability Scanning](https://cloud.google.com/container-registry/docs/vulnerability-scanning) in your Google Cloud project.
+Enable [Vulnerability
+Scanning](https://cloud.google.com/container-registry/docs/vulnerability-scanning)
+in your Google Cloud project.
 
-Container Analysis runs on images in [Container Registry](https://cloud.google.com/container-registry/docs/), therefore this demo will restrict your cluster to only run images from your own Container Registry.
+Container Analysis runs on images in [Container
+Registry](https://cloud.google.com/container-registry/docs/), therefore this
+demo will restrict your cluster to only run images from your own Container
+Registry.
 
-The webhook uses [Application Default Credentials](https://developers.google.com/identity/protocols/application-default-credentials) to authenticate with Container Registry and Analysis. Therefore it must run on a Google Kubernetes Engine cluster with the approprate scopes (instructions below). To run the demo off of Google Cloud Platform, a service account must be used to access Container Registry and Analysis. See:
+The webhook uses [Application Default
+Credentials](https://developers.google.com/identity/protocols/application-default-credentials)
+to authenticate with Container Registry and Analysis. Therefore it must run on a
+Google Kubernetes Engine cluster with the approprate scopes (instructions
+below). To run the demo off of Google Cloud Platform, a service account must be
+used to access Container Registry and Analysis. See:
 * https://godoc.org/golang.org/x/oauth2/google
 * https://cloud.google.com/iam/docs/how-to
 
 A Kubernetes 1.8+ cluster is required with support for the external admission
-webhooks
-**alpha** feature enabled.
+webhooks **alpha** feature enabled.
 
 ## Tutorial
 
 ### Infrastructure
 
-Use the gcloud command to
-create a [Google Kubernetes
+Use the gcloud command to create a [Google Kubernetes
 Engine](https://cloud.google.com/container-engine/) 1.8 cluster:
 
 ```
@@ -46,7 +59,8 @@ Create the `container-analysis-webhook` deployment:
 kubectl apply -f kubernetes/container-analysis-webhook.yaml
 ```
 
-Create the `container-analysis-webook` [ExternalAdmissionHookConfiguration](https://kubernetes.io/docs/admin/extensible-admission-controllers/#how-are-external-admission-webhooks-triggered):
+Create the `container-analysis-webook`
+[ExternalAdmissionHookConfiguration](https://kubernetes.io/docs/admin/extensible-admission-controllers/#how-are-external-admission-webhooks-triggered):
 
 ```
 kubectl apply -f kubernetes/admission-hook-configuration.yaml
@@ -56,7 +70,8 @@ kubectl apply -f kubernetes/admission-hook-configuration.yaml
 
 ### Testing the Admission Webhook
 
-Pull down some images and push them to your registry to be scanned. Scanning will happen automatically if enabled.
+Pull down some images and push them to your registry to be scanned. Scanning
+will happen automatically if enabled.
 
 ```bash
 GCLOUD_PROJECT=<my-project>
@@ -102,7 +117,8 @@ $
 
 ## Cleanup
 
-Run the following commands to remove the Kubernetes resources created during this tutorial:
+Run the following commands to remove the Kubernetes resources created during
+this tutorial:
 
 ```
 kubectl delete deployments container-analysis-webhook
