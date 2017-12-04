@@ -21,7 +21,7 @@ Registry.
 
 The webhook uses [Application Default
 Credentials](https://developers.google.com/identity/protocols/application-default-credentials)
-to authenticate with Container Registry and Analysis. Therefore it must run on a
+to authenticate with Container Registry and Analysis, therefore it must run on a
 Google Kubernetes Engine cluster with the approprate scopes (instructions
 below). To run the demo off of Google Cloud Platform, a service account must be
 used to access Container Registry and Analysis. See:
